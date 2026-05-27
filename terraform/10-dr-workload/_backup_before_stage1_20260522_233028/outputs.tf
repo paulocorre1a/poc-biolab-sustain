@@ -1,0 +1,10 @@
+output "resource_group_name" { value = azurerm_resource_group.main.name }
+output "location" { value = azurerm_resource_group.main.location }
+output "storage_account_name" { value = azurerm_storage_account.artifacts.name }
+output "evidence_container_name" { value = azurerm_storage_container.evidence.name }
+output "databricks_workspace_name" { value = azurerm_databricks_workspace.main.name }
+output "databricks_workspace_id" { value = azurerm_databricks_workspace.main.id }
+output "databricks_workspace_url" { value = azurerm_databricks_workspace.main.workspace_url }
+output "databricks_notebook_path" { value = databricks_notebook.dr_validation.path }
+output "databricks_cluster_id" { value = databricks_cluster.dr_cluster.id }
+output "databricks_job_id" { value = databricks_job.dr_job.id }

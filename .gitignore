@@ -1,0 +1,42 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform variable secrets
+*.auto.tfvars
+terraform.tfvars
+
+# Local backend cache
+.terraform.lock.hcl
+
+# PowerShell
+*.ps1xml
+
+# Logs
+*.log
+
+# VSCode
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Temporary
+tmp/
+temp/
+
+# Evidence runtime artifacts
+evidence/*.zip
+evidence/*.tmp
+
+# Python cache
+__pycache__/
+*.pyc

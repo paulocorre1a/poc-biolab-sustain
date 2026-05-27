@@ -1,0 +1,131 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  azureServiceConnection: 'SC-Azure-POC'
+
+  subscriptionId: '4ae6462d-bd8b-4156-a6e4-871ca4c32dd8'
+  tenantId: 'c91d481c-40b4-4ff9-8f2e-a00df534d8b7'
+
+  terraformWorkingDirectory: '$(System.DefaultWorkingDirectory)/terraform/10-dr-workload'
+  backendConfigFile: 'backend-dev.hcl'
+  tfvarsFile: 'dev.tfvars'
+
+  drResourceGroupName: 'rg-poc-biolab-dr-dev'
+  databricksWorkspaceName: 'dbw-poc-biolab-dr-dev'
+  evidenceStorageAccountName: 'stpocbiolabdrdev001'
+  evidenceContainerName: 'evidence'
+  evidencePath: '$(System.DefaultWorkingDirectory)/evidence/databricks-restore-evidence.json'
+
+stages:
+- stage: Validate
+  displayName: 'Validate Terraform and Scripts'
+  jobs:
+  - job: Validate
+    displayName: 'Validate'
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: 'Terraform Init and Validate'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          cd "$(terraformWorkingDirectory)"
+          terraform version
+          terraform init -reconfigure -backend-config="$(backendConfigFile)"
+          terraform fmt -recursive -check
+          terraform validate
+
+- stage: DeployInfra
+  displayName: 'Deploy Azure Infrastructure'
+  dependsOn: Validate
+  jobs:
+  - job: TerraformApply
+    displayName: 'Terraform Apply'
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: 'Terraform Apply'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          cd "$(terraformWorkingDirectory)"
+          terraform init -reconfigure -backend-config="$(backendConfigFile)"
+          terraform plan -var-file="$(tfvarsFile)" -out="tfplan"
+          terraform apply -auto-approve "tfplan"
+          terraform output -json | Out-File "$(System.DefaultWorkingDirectory)/evidence/terraform-outputs.json" -Encoding utf8
+
+- stage: RestoreDatabricks
+  displayName: 'Restore Databricks Artifacts'
+  dependsOn: DeployInfra
+  jobs:
+  - job: Restore
+    displayName: 'Restore Cluster Notebook Job'
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: 'Restore Databricks Workspace'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          cd "$(System.DefaultWorkingDirectory)"
+
+          .\scripts\Restore-DatabricksWorkspace.ps1 `
+            -SubscriptionId "$(subscriptionId)" `
+            -ResourceGroupName "$(drResourceGroupName)" `
+            -WorkspaceName "$(databricksWorkspaceName)" `
+            -EvidenceDirectory ".\evidence"
+
+          .\scripts\Wait-DatabricksRun.ps1 `
+            -SubscriptionId "$(subscriptionId)" `
+            -ResourceGroupName "$(drResourceGroupName)" `
+            -WorkspaceName "$(databricksWorkspaceName)" `
+            -EvidencePath ".\evidence\databricks-restore-evidence.json"
+
+- stage: PublishEvidence
+  displayName: 'Publish DR Evidence'
+  dependsOn: RestoreDatabricks
+  jobs:
+  - job: Publish
+    displayName: 'Publish Evidence'
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: 'Upload Evidence to Azure Storage'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          cd "$(System.DefaultWorkingDirectory)"
+
+          .\scripts\Publish-DrEvidence.ps1 `
+            -SubscriptionId "$(subscriptionId)" `
+            -ResourceGroupName "$(drResourceGroupName)" `
+            -StorageAccountName "$(evidenceStorageAccountName)" `
+            -ContainerName "$(evidenceContainerName)" `
+            -EvidencePath ".\evidence\databricks-restore-evidence.json"
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Evidence as Pipeline Artifact'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/evidence'
+        artifact: 'databricks-dr-evidence'
+        publishLocation: 'pipeline'

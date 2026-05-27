@@ -10,6 +10,7 @@ pool:
 
 variables:
   azureServiceConnection: 'SC-Azure-POC'
+  terraformVersion: '1.11.4'
 
   subscriptionId: '4ae6462d-bd8b-4156-a6e4-871ca4c32dd8'
   tenantId: 'c91d481c-40b4-4ff9-8f2e-a00df534d8b7'
@@ -22,7 +23,6 @@ variables:
   databricksWorkspaceName: 'dbw-poc-biolab-dr-dev'
   evidenceStorageAccountName: 'stpocbiolabdrdev001'
   evidenceContainerName: 'evidence'
-  evidencePath: '$(System.DefaultWorkingDirectory)/evidence/databricks-restore-evidence.json'
 
 stages:
 - stage: Validate
@@ -40,8 +40,18 @@ stages:
         scriptType: 'pscore'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          cd "$(terraformWorkingDirectory)"
+          $tfVersion = "$(terraformVersion)"
+          $tfDir = "$(Agent.TempDirectory)\terraform"
+          New-Item -ItemType Directory -Path $tfDir -Force | Out-Null
+
+          $zipPath = "$(Agent.TempDirectory)\terraform.zip"
+          Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/$tfVersion/terraform_${tfVersion}_windows_amd64.zip" -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $tfDir -Force
+
+          $env:PATH = "$tfDir;$env:PATH"
           terraform version
+
+          cd "$(terraformWorkingDirectory)"
           terraform init -reconfigure -backend-config="$(backendConfigFile)"
           terraform fmt -recursive -check
           terraform validate
@@ -62,6 +72,19 @@ stages:
         scriptType: 'pscore'
         scriptLocation: 'inlineScript'
         inlineScript: |
+          $tfVersion = "$(terraformVersion)"
+          $tfDir = "$(Agent.TempDirectory)\terraform"
+          New-Item -ItemType Directory -Path $tfDir -Force | Out-Null
+
+          $zipPath = "$(Agent.TempDirectory)\terraform.zip"
+          Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/$tfVersion/terraform_${tfVersion}_windows_amd64.zip" -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $tfDir -Force
+
+          $env:PATH = "$tfDir;$env:PATH"
+          terraform version
+
+          New-Item -ItemType Directory -Path "$(System.DefaultWorkingDirectory)/evidence" -Force | Out-Null
+
           cd "$(terraformWorkingDirectory)"
           terraform init -reconfigure -backend-config="$(backendConfigFile)"
           terraform plan -var-file="$(tfvarsFile)" -out="tfplan"
@@ -85,6 +108,7 @@ stages:
         scriptLocation: 'inlineScript'
         inlineScript: |
           cd "$(System.DefaultWorkingDirectory)"
+          New-Item -ItemType Directory -Path ".\evidence" -Force | Out-Null
 
           .\scripts\Restore-DatabricksWorkspace.ps1 `
             -SubscriptionId "$(subscriptionId)" `

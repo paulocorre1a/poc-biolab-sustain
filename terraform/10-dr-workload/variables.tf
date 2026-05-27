@@ -39,6 +39,10 @@ variable "databricks_workspace_name" {
   type = string
 }
 
+variable "databricks_managed_resource_group_name" {
+  type = string
+}
+
 variable "databricks_sku" {
   type    = string
   default = "premium"
@@ -58,41 +62,7 @@ variable "evidence_container_name" {
   default = "evidence"
 }
 
-variable "cluster_name" {
-  type = string
-}
-
-variable "cluster_node_type_id" {
+variable "logs_container_name" {
   type    = string
-  default = "Standard_DS3_v2"
-}
-
-variable "spark_version" {
-  type    = string
-  default = "15.4.x-scala2.12"
-}
-
-variable "cluster_min_workers" {
-  type    = number
-  default = 1
-}
-
-variable "cluster_max_workers" {
-  type    = number
-  default = 2
-}
-
-variable "cluster_num_workers" {
-  type    = number
-  default = 1
-}
-
-variable "cluster_autotermination_minutes" {
-  type    = number
-  default = 30
-}
-
-variable "tags" {
-  type    = map(string)
-  default = {}
+  default = "logs"
 }

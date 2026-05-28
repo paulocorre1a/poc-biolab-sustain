@@ -210,7 +210,6 @@ $jobPayload = @{
             new_cluster = @{
                 spark_version           = $SparkVersion
                 node_type_id            = $NodeTypeId
-                autotermination_minutes = 30
                 autoscale               = @{
                     min_workers = $MinWorkers
                     max_workers = $MaxWorkers
@@ -309,4 +308,5 @@ Write-Host "Databricks restore submitted successfully."
 Write-Host "Job ID    : $jobId"
 Write-Host "Run ID    : $runId"
 Write-Host "Evidence  : $evidencePath"
+
 

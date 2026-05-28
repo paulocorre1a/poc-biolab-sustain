@@ -26,6 +26,7 @@ resource "azurerm_storage_account" "artifacts" {
   min_tls_version                 = "TLS1_2"
   https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
+  is_hns_enabled                  = true
 
   tags = local.common_tags
 }
@@ -44,6 +45,30 @@ resource "azurerm_storage_container" "evidence" {
 
 resource "azurerm_storage_container" "logs" {
   name                  = var.logs_container_name
+  storage_account_name  = azurerm_storage_account.artifacts.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "raw" {
+  name                  = var.raw_container_name
+  storage_account_name  = azurerm_storage_account.artifacts.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "bronze" {
+  name                  = var.bronze_container_name
+  storage_account_name  = azurerm_storage_account.artifacts.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "silver" {
+  name                  = var.silver_container_name
+  storage_account_name  = azurerm_storage_account.artifacts.name
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_container" "gold" {
+  name                  = var.gold_container_name
   storage_account_name  = azurerm_storage_account.artifacts.name
   container_access_type = "private"
 }

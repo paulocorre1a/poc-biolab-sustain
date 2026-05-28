@@ -1,0 +1,6 @@
+order_id,customer,product,quantity,unit_price,order_date
+1001,Hospital Alfa,Reagente A,10,125.50,2026-05-01
+1002,Hospital Beta,Kit Diagnostico B,5,980.00,2026-05-02
+1003,Clinica Gamma,Reagente C,20,75.25,2026-05-03
+1004,Laboratorio Delta,Controle Qualidade D,3,1500.00,2026-05-04
+1005,Hospital Alfa,Kit Diagnostico B,2,980.00,2026-05-05

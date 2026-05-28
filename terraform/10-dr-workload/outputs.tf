@@ -10,18 +10,6 @@ output "storage_account_name" {
   value = azurerm_storage_account.artifacts.name
 }
 
-output "artifacts_container_name" {
-  value = azurerm_storage_container.artifacts.name
-}
-
-output "evidence_container_name" {
-  value = azurerm_storage_container.evidence.name
-}
-
-output "logs_container_name" {
-  value = azurerm_storage_container.logs.name
-}
-
 output "databricks_workspace_name" {
   value = azurerm_databricks_workspace.main.name
 }
@@ -34,6 +22,14 @@ output "databricks_workspace_url" {
   value = azurerm_databricks_workspace.main.workspace_url
 }
 
-output "databricks_workspace_resource_id" {
-  value = azurerm_databricks_workspace.main.id
+output "containers" {
+  value = {
+    artifacts = azurerm_storage_container.artifacts.name
+    evidence  = azurerm_storage_container.evidence.name
+    logs      = azurerm_storage_container.logs.name
+    raw       = azurerm_storage_container.raw.name
+    bronze    = azurerm_storage_container.bronze.name
+    silver    = azurerm_storage_container.silver.name
+    gold      = azurerm_storage_container.gold.name
+  }
 }

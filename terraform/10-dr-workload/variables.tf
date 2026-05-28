@@ -66,3 +66,23 @@ variable "logs_container_name" {
   type    = string
   default = "logs"
 }
+
+variable "raw_container_name" {
+  type    = string
+  default = "raw"
+}
+
+variable "bronze_container_name" {
+  type    = string
+  default = "bronze"
+}
+
+variable "silver_container_name" {
+  type    = string
+  default = "silver"
+}
+
+variable "gold_container_name" {
+  type    = string
+  default = "gold"
+}

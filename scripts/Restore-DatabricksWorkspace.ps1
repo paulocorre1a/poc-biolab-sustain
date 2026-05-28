@@ -34,7 +34,13 @@ param(
     [string]$JobName = "job-poc-biolab-dr-validation",
 
     [Parameter(Mandatory = $false)]
-    [string]$EvidenceDirectory = ".\evidence"
+    [string]$EvidenceDirectory = ".\evidence",
+
+    [Parameter(Mandatory = $false)]
+    [string]$DataStorageAccountName = "stpocbiolabdrdev001",
+
+    [Parameter(Mandatory = $false)]
+    [string]$SampleDataPath = ".\data\sales_raw.csv"
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,16 +59,13 @@ function Invoke-DatabricksApi {
     )
 
     $uri = "$script:WorkspaceUrl$Path"
-
-    $headers = @{
-        Authorization = "Bearer $script:DatabricksToken"
-    }
+    $headers = @{ Authorization = "Bearer $script:DatabricksToken" }
 
     if ($Method -eq "GET") {
         return Invoke-RestMethod -Method Get -Uri $uri -Headers $headers
     }
 
-    $jsonBody = $Body | ConvertTo-Json -Depth 20
+    $jsonBody = $Body | ConvertTo-Json -Depth 30
 
     return Invoke-RestMethod `
         -Method Post `
@@ -73,7 +76,7 @@ function Invoke-DatabricksApi {
 }
 
 Write-Host "============================================================"
-Write-Host "BIOLAB - Databricks Restore"
+Write-Host "BIOLAB - Databricks Restore with Data Validation"
 Write-Host "============================================================"
 
 az account set --subscription $SubscriptionId
@@ -105,18 +108,48 @@ if (-not (Test-Path $NotebookLocalPath)) {
     throw "Notebook file not found: $NotebookLocalPath"
 }
 
+if (-not (Test-Path $SampleDataPath)) {
+    throw "Sample data file not found: $SampleDataPath"
+}
+
 if (-not (Test-Path $EvidenceDirectory)) {
     New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
 }
+
+Write-Host "Retrieving storage key for data lake access..."
+
+$storageKey = az storage account keys list `
+    --resource-group $ResourceGroupName `
+    --account-name $DataStorageAccountName `
+    --query "[0].value" `
+    -o tsv
+
+if ([string]::IsNullOrWhiteSpace($storageKey)) {
+    throw "Failed to retrieve storage account key."
+}
+
+Write-Host "Uploading sample CSV to raw container..."
+
+az storage blob upload `
+    --account-name $DataStorageAccountName `
+    --account-key $storageKey `
+    --container-name "raw" `
+    --name "sales/sales_raw.csv" `
+    --file $SampleDataPath `
+    --overwrite true | Out-Null
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to upload sample CSV to raw container."
+}
+
+Write-Host "Sample CSV uploaded successfully."
 
 Write-Host "Ensuring workspace directory exists: /Shared/biolab"
 
 Invoke-DatabricksApi `
     -Method POST `
     -Path "/api/2.0/workspace/mkdirs" `
-    -Body @{
-        path = "/Shared/biolab"
-    } | Out-Null
+    -Body @{ path = "/Shared/biolab" } | Out-Null
 
 Write-Host "Importing notebook: $NotebookWorkspacePath"
 
@@ -136,7 +169,6 @@ Invoke-DatabricksApi `
 
 Write-Host "Notebook imported successfully."
 
-
 Write-Host "Waiting for Databricks worker environment to become ready..."
 
 $workerReady = $false
@@ -152,8 +184,6 @@ for ($attempt = 1; $attempt -le 30; $attempt++) {
             Write-Host "Databricks worker environment is ready."
             break
         }
-
-        Write-Host "Attempt $attempt - worker environment not ready yet."
     }
     catch {
         Write-Host "Attempt $attempt - worker environment not ready yet: $($_.Exception.Message)"
@@ -179,37 +209,51 @@ if ($clustersResponse.clusters) {
 }
 
 if ($existingCluster) {
-    $clusterId = $existingCluster.cluster_id
-    Write-Host "Cluster already exists: $ClusterName ($clusterId)"
-}
-else {
-    Write-Host "Creating cluster: $ClusterName"
+    Write-Host "Existing cluster found. Terminating old cluster: $($existingCluster.cluster_id)"
 
-    $clusterCreateResponse = Invoke-DatabricksApi `
-        -Method POST `
-        -Path "/api/2.0/clusters/create" `
-        -Body @{
-            cluster_name            = $ClusterName
-            spark_version           = $SparkVersion
-            node_type_id            = $NodeTypeId
-            autotermination_minutes = 30
-            autoscale               = @{
-                min_workers = $MinWorkers
-                max_workers = $MaxWorkers
-            }
-            custom_tags = @{
-                project     = "biolab"
-                environment = "dev"
-                purpose     = "databricks-dr-poc"
-                managed_by  = "powershell"
-            }
+    try {
+        Invoke-DatabricksApi `
+            -Method POST `
+            -Path "/api/2.0/clusters/delete" `
+            -Body @{ cluster_id = $existingCluster.cluster_id } | Out-Null
+    }
+    catch {
+        Write-Host "Cluster termination request ignored: $($_.Exception.Message)"
+    }
+
+    Start-Sleep -Seconds 30
+}
+
+Write-Host "Creating cluster with ADLS access: $ClusterName"
+
+$clusterCreateResponse = Invoke-DatabricksApi `
+    -Method POST `
+    -Path "/api/2.0/clusters/create" `
+    -Body @{
+        cluster_name            = $ClusterName
+        spark_version           = $SparkVersion
+        node_type_id            = $NodeTypeId
+        autotermination_minutes = 30
+        autoscale               = @{
+            min_workers = $MinWorkers
+            max_workers = $MaxWorkers
         }
+        spark_conf              = @{
+            "fs.azure.account.key.$DataStorageAccountName.dfs.core.windows.net" = $storageKey
+            "fs.azure.account.key.$DataStorageAccountName.blob.core.windows.net" = $storageKey
+        }
+        custom_tags             = @{
+            project     = "biolab"
+            environment = "dev"
+            purpose     = "databricks-dr-poc-data-validation"
+            managed_by  = "powershell"
+        }
+    }
 
-    $clusterId = $clusterCreateResponse.cluster_id
-    Write-Host "Cluster created: $clusterId"
-}
+$clusterId = $clusterCreateResponse.cluster_id
+Write-Host "Cluster created: $clusterId"
 
-Write-Host "Creating Databricks job: $JobName"
+Write-Host "Creating or resetting Databricks job: $JobName"
 
 $jobPayload = @{
     name = $JobName
@@ -225,7 +269,7 @@ $jobPayload = @{
     tags = @{
         project     = "biolab"
         environment = "dev"
-        purpose     = "databricks-dr-poc"
+        purpose     = "databricks-dr-poc-data-validation"
         managed_by  = "powershell"
     }
 }
@@ -267,9 +311,7 @@ Write-Host "Running job now..."
 $runNowResponse = Invoke-DatabricksApi `
     -Method POST `
     -Path "/api/2.1/jobs/run-now" `
-    -Body @{
-        job_id = $jobId
-    }
+    -Body @{ job_id = $jobId }
 
 $runId = $runNowResponse.run_id
 
@@ -283,6 +325,10 @@ $evidence = [ordered]@{
     workspace_url           = $script:WorkspaceUrl
     workspace_id            = $WorkspaceId
     workspace_resource_id   = $WorkspaceResourceId
+    data_storage_account    = $DataStorageAccountName
+    raw_input_path          = "abfss://raw@$DataStorageAccountName.dfs.core.windows.net/sales/sales_raw.csv"
+    silver_output_path      = "abfss://silver@$DataStorageAccountName.dfs.core.windows.net/sales/sales_silver"
+    gold_output_path        = "abfss://gold@$DataStorageAccountName.dfs.core.windows.net/sales/sales_gold"
     cluster_name            = $ClusterName
     cluster_id              = $clusterId
     notebook_workspace_path = $NotebookWorkspacePath
@@ -299,13 +345,4 @@ $evidence |
     Set-Content -Path $evidencePath -Encoding UTF8
 
 Write-Host "Evidence generated: $evidencePath"
-
-Write-Host "============================================================"
 Write-Host "Databricks restore submitted successfully."
-Write-Host "============================================================"
-Write-Host "Cluster ID: $clusterId"
-Write-Host "Job ID    : $jobId"
-Write-Host "Run ID    : $runId"
-Write-Host "Evidence  : $evidencePath"
-Write-Host "============================================================"
-

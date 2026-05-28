@@ -40,3 +40,8 @@ evidence/*.tmp
 # Python cache
 __pycache__/
 *.pyc
+
+# Runtime evidence
+evidence/*.json
+evidence/*
+!evidence/.gitkeep

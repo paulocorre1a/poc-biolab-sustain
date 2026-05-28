@@ -136,6 +136,36 @@ Invoke-DatabricksApi `
 
 Write-Host "Notebook imported successfully."
 
+
+Write-Host "Waiting for Databricks worker environment to become ready..."
+
+$workerReady = $false
+
+for ($attempt = 1; $attempt -le 30; $attempt++) {
+    try {
+        $nodeTypesResponse = Invoke-DatabricksApi `
+            -Method GET `
+            -Path "/api/2.0/clusters/list-node-types"
+
+        if ($nodeTypesResponse.node_types -and $nodeTypesResponse.node_types.Count -gt 0) {
+            $workerReady = $true
+            Write-Host "Databricks worker environment is ready."
+            break
+        }
+
+        Write-Host "Attempt $attempt - worker environment not ready yet."
+    }
+    catch {
+        Write-Host "Attempt $attempt - worker environment not ready yet: $($_.Exception.Message)"
+    }
+
+    Start-Sleep -Seconds 30
+}
+
+if (-not $workerReady) {
+    throw "Databricks worker environment was not ready after waiting."
+}
+
 Write-Host "Checking existing clusters..."
 
 $clustersResponse = Invoke-DatabricksApi `
@@ -278,3 +308,4 @@ Write-Host "Job ID    : $jobId"
 Write-Host "Run ID    : $runId"
 Write-Host "Evidence  : $evidencePath"
 Write-Host "============================================================"
+

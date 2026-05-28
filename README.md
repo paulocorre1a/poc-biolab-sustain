@@ -2,106 +2,157 @@
 
 POC corporativa de Disaster Recovery para Azure Databricks com reconstrução automatizada via Azure DevOps Pipeline.
 
-## Objetivo
+---
 
-Provar que é possível destruir e reconstruir do zero uma plataforma Azure Databricks funcional, incluindo infraestrutura Azure, Storage, Databricks Workspace, notebooks, jobs, processamento de dados e evidências de restore.
+# Objetivo
 
-## Arquitetura geral
+Provar que é possível destruir e reconstruir do zero uma plataforma Azure Databricks funcional, incluindo:
 
-``mermaid
+- Infraestrutura Azure
+- Azure Databricks Workspace
+- Storage Account
+- Containers RAW / BRONZE / SILVER / GOLD
+- Notebooks
+- Jobs
+- Job Cluster efêmero
+- Processamento de dados
+- Evidências de restore
+
+---
+
+# Arquitetura geral
+
+```mermaid
 flowchart TD
     A[GitHub Repository] --> B[Azure DevOps Pipeline]
     B --> C[Terraform Backend]
-    C --> D[Azure Infra]
+    C --> D[Azure Infrastructure]
     D --> E[Azure Databricks Workspace]
-    D --> F[Storage Account Data Lake]
+    D --> F[Azure Storage Data Lake]
     E --> G[Databricks Job]
-    G --> H[Job Cluster Efemero]
+    G --> H[Job Cluster Efêmero]
     H --> I[Notebook DR Validation]
     I --> J[RAW -> BRONZE -> SILVER -> GOLD]
-    J --> K[Evidencia JSON]
+    J --> K[Evidência JSON]
     K --> L[Azure Storage Evidence]
     K --> M[Pipeline Artifact]
-``
+```
 
-## Foundation permanente
+---
 
-Recursos que NAO devem ser apagados:
+# Separação de recursos
 
-- Resource Group: poc-biolab-sustain
-- Storage Account tfstate: stpocbiolabtfstate001
-- Container: tfstate
+```mermaid
+flowchart LR
+    A[Foundation Permanente] --> A1[poc-biolab-sustain]
+    A --> A2[stpocbiolabtfstate001]
+    A --> A3[tfstate]
+
+    B[Workload Recuperável] --> B1[rg-poc-biolab-dr-dev]
+    B --> B2[dbw-poc-biolab-dr-dev]
+    B --> B3[stpocbiolabdrdev001]
+    B --> B4[rg-poc-biolab-dr-dev-dbw-managed]
+```
+
+---
+
+# Foundation permanente
+
+Recursos que NÃO devem ser apagados:
+
+- Resource Group: `poc-biolab-sustain`
+- Storage Account tfstate: `stpocbiolabtfstate001`
+- Container: `tfstate`
 - Azure DevOps Pipeline
 - GitHub Repository
 
-## Workload recuperavel
+---
+
+# Workload recuperável
 
 Recursos que podem ser apagados e recriados:
 
-- Resource Group: rg-poc-biolab-dr-dev
-- Managed Resource Group Databricks: rg-poc-biolab-dr-dev-dbw-managed
-- Azure Databricks Workspace: dbw-poc-biolab-dr-dev
-- Storage Account: stpocbiolabdrdev001
-- Containers: raw, bronze, silver, gold, artifacts, evidence, logs
+- Resource Group: `rg-poc-biolab-dr-dev`
+- Managed Resource Group Databricks: `rg-poc-biolab-dr-dev-dbw-managed`
+- Azure Databricks Workspace: `dbw-poc-biolab-dr-dev`
+- Storage Account: `stpocbiolabdrdev001`
 
-## Estrategia tecnica
+Containers:
 
-- Terraform cria Resource Group, Storage Account, Containers e Azure Databricks Workspace.
-- PowerShell com Databricks REST API restaura Notebook, Job, Job Cluster efemero, execucao do Job e evidencia JSON.
+- `raw`
+- `bronze`
+- `silver`
+- `gold`
+- `artifacts`
+- `evidence`
+- `logs`
 
-``mermaid
+---
+
+# Estratégia técnica
+
+```mermaid
 flowchart TD
     A[Terraform] --> B[Resource Group]
     A --> C[Storage Account]
     A --> D[Containers]
     A --> E[Databricks Workspace]
+
     F[PowerShell + Databricks REST API] --> G[Upload RAW Data]
     F --> H[Import Notebook]
     F --> I[Create Job]
-    F --> J[Run Job Cluster Efemero]
+    F --> J[Run Job Cluster Efêmero]
     F --> K[Generate Evidence]
-``
+```
 
-## Sobre o Compute
+---
 
-A POC nao mantem All-purpose Compute permanente.
+# Sobre o Compute
 
-O Job usa Job Cluster efemero. Ele nasce automaticamente durante a execucao do Job, executa o notebook e e encerrado automaticamente.
+A POC NÃO mantém All-purpose Compute permanente.
 
-Por isso a tela Compute pode ficar vazia apos a execucao. Isso e esperado.
+O Job usa Job Cluster efêmero:
 
-## Fluxo de dados
+- nasce automaticamente durante a execução do Job
+- executa o notebook
+- é encerrado automaticamente
+- não aparece como All-purpose Compute permanente
 
-``mermaid
+Por isso a tela Compute pode ficar vazia após a execução. Isso é esperado.
+
+---
+
+# Fluxo Medallion
+
+```mermaid
 flowchart LR
     A[RAW CSV] --> B[BRONZE Delta]
     B --> C[SILVER Delta]
     C --> D[GOLD Delta]
-``
+```
 
 Entradas:
 
-- raw/customers/customers.csv
-- raw/sales/sales.csv
+- `raw/customers/customers.csv`
+- `raw/sales/sales.csv`
 
-Saidas:
+Saídas:
 
-- bronze/customers
-- bronze/sales
-- silver/sales_customer
-- gold/customer_revenue
-- gold/state_revenue
+- `bronze/customers`
+- `bronze/sales`
+- `silver/sales_customer`
+- `gold/customer_revenue`
+- `gold/state_revenue`
 
-## Pipeline
+---
 
-Arquivo: .azuredevops/azure-pipelines.yml
+# Pipeline
 
-``mermaid
-flowchart TD
-    A[Validate Terraform and Scripts] --> B[Deploy Azure Infrastructure]
-    B --> C[Restore Databricks Artifacts]
-    C --> D[Publish DR Evidence]
-``
+Arquivo:
+
+```text
+.azuredevops/azure-pipelines.yml
+```
 
 Stages:
 
@@ -110,21 +161,45 @@ Stages:
 3. Restore Databricks Artifacts
 4. Publish DR Evidence
 
-## Evidencia esperada
+---
+
+# Pipeline Flow
+
+```mermaid
+flowchart TD
+    A[Validate Terraform and Scripts]
+        --> B[Deploy Azure Infrastructure]
+
+    B --> C[Restore Databricks Artifacts]
+
+    C --> D[Publish DR Evidence]
+```
+
+---
+
+# Evidência esperada
 
 Artifact final:
 
-- databricks-dr-evidence-final/databricks-restore-evidence.json
+```text
+databricks-dr-evidence-final/databricks-restore-evidence.json
+```
 
 Campos esperados:
 
-- restore_status = SUCCESS
-- run_life_cycle_state = TERMINATED
-- run_result_state = SUCCESS
+```json
+{
+  "restore_status": "SUCCESS",
+  "run_life_cycle_state": "TERMINATED",
+  "run_result_state": "SUCCESS"
+}
+```
 
-## Teste completo de DR
+---
 
-``mermaid
+# Teste completo de DR
+
+```mermaid
 sequenceDiagram
     participant User
     participant Terraform
@@ -132,51 +207,100 @@ sequenceDiagram
     participant Pipeline
     participant Databricks
     participant Storage
+
     User->>Terraform: terraform destroy
-    Terraform->>Azure: remove workload recuperavel
+    Terraform->>Azure: remove workload recuperável
+
     User->>Pipeline: Run pipeline
+
     Pipeline->>Terraform: terraform apply
-    Terraform->>Azure: recria infra
+    Terraform->>Azure: recria infraestrutura
+
     Pipeline->>Databricks: restaura notebook e job
-    Databricks->>Storage: le RAW
+
+    Databricks->>Storage: lê RAW
     Databricks->>Storage: grava BRONZE/SILVER/GOLD
-    Pipeline->>Storage: publica evidencia
-``
 
-### 1. Destruir workload recuperavel
+    Pipeline->>Storage: publica evidência
+```
 
-Comando:
+---
 
+# Como executar o teste
+
+## 1. Destruir workload recuperável
+
+```powershell
 cd C:\Projetos\poc_biolab\terraform\10-dr-workload
+
 terraform destroy -var-file="dev.tfvars"
+```
 
-Confirmar com: yes
+Confirmar com:
 
-### 2. Validar que o workload foi apagado
+```text
+yes
+```
 
+---
+
+## 2. Validar que o workload foi apagado
+
+```powershell
 az group show --name rg-poc-biolab-dr-dev -o table
+
 az group show --name rg-poc-biolab-dr-dev-dbw-managed -o table
+```
 
-O esperado e que ambos nao existam.
+O esperado é que ambos não existam.
 
-### 3. Validar que a foundation continua
+---
 
+## 3. Validar que a foundation continua
+
+```powershell
 az group show --name poc-biolab-sustain -o table
-az storage account show --name stpocbiolabtfstate001 --resource-group poc-biolab-sustain -o table
 
-### 4. Reexecutar o pipeline
+az storage account show `
+  --name stpocbiolabtfstate001 `
+  --resource-group poc-biolab-sustain `
+  -o table
+```
 
-No Azure DevOps: Pipelines -> Run pipeline
+---
 
-### 5. Validar resultado
+## 4. Reexecutar o pipeline
+
+Azure DevOps:
+
+```text
+Pipelines -> Run pipeline
+```
+
+---
+
+## 5. Validar resultado
+
+Validar:
 
 - Pipeline verde
 - Artifact final publicado
-- JSON com restore_status = SUCCESS
+- JSON com `restore_status = SUCCESS`
 - Storage com containers RAW/BRONZE/SILVER/GOLD
-- Job Databricks com ultimo run SUCCESS
-- All-purpose Compute vazio
+- Job Databricks com último run SUCCESS
+- Compute vazio após execução
 
-## Resultado final
+---
 
-Esta POC prova reconstrucao automatizada do Azure Databricks, separacao entre foundation e workload recuperavel, Terraform remoto com backend resiliente, pipeline one-click deploy and restore, execucao real de dados com Spark, arquitetura Medallion basica e evidencia auditavel do restore.
+# Resultado final
+
+Esta POC prova:
+
+- reconstrução automatizada do Azure Databricks
+- separação entre foundation e workload recuperável
+- Terraform remoto com backend resiliente
+- pipeline one-click deploy and restore
+- execução real de dados com Spark
+- arquitetura Medallion
+- evidência auditável do restore
+- recuperação completa após destruição do workload

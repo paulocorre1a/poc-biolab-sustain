@@ -29,7 +29,6 @@ stages:
   displayName: 'Validate Terraform and Scripts'
   jobs:
   - job: Validate
-    displayName: 'Validate'
     steps:
     - checkout: self
 
@@ -43,13 +42,10 @@ stages:
           $tfVersion = "$(terraformVersion)"
           $tfDir = "$(Agent.TempDirectory)\terraform"
           New-Item -ItemType Directory -Path $tfDir -Force | Out-Null
-
           $zipPath = "$(Agent.TempDirectory)\terraform.zip"
           Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/$tfVersion/terraform_${tfVersion}_windows_amd64.zip" -OutFile $zipPath
           Expand-Archive -Path $zipPath -DestinationPath $tfDir -Force
-
           $env:PATH = "$tfDir;$env:PATH"
-          terraform version
 
           cd "$(terraformWorkingDirectory)"
           terraform init -reconfigure -backend-config="$(backendConfigFile)"
@@ -61,7 +57,6 @@ stages:
   dependsOn: Validate
   jobs:
   - job: TerraformApply
-    displayName: 'Terraform Apply'
     steps:
     - checkout: self
 
@@ -75,13 +70,10 @@ stages:
           $tfVersion = "$(terraformVersion)"
           $tfDir = "$(Agent.TempDirectory)\terraform"
           New-Item -ItemType Directory -Path $tfDir -Force | Out-Null
-
           $zipPath = "$(Agent.TempDirectory)\terraform.zip"
           Invoke-WebRequest -Uri "https://releases.hashicorp.com/terraform/$tfVersion/terraform_${tfVersion}_windows_amd64.zip" -OutFile $zipPath
           Expand-Archive -Path $zipPath -DestinationPath $tfDir -Force
-
           $env:PATH = "$tfDir;$env:PATH"
-          terraform version
 
           New-Item -ItemType Directory -Path "$(System.DefaultWorkingDirectory)/evidence" -Force | Out-Null
 
@@ -96,7 +88,6 @@ stages:
   dependsOn: DeployInfra
   jobs:
   - job: Restore
-    displayName: 'Restore Cluster Notebook Job'
     steps:
     - checkout: self
 
@@ -122,14 +113,29 @@ stages:
             -WorkspaceName "$(databricksWorkspaceName)" `
             -EvidencePath ".\evidence\databricks-restore-evidence.json"
 
+          Get-ChildItem -Path ".\evidence" -Recurse -Force | Format-Table FullName, Length
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Evidence Between Stages'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/evidence'
+        artifact: 'databricks-dr-evidence'
+        publishLocation: 'pipeline'
+
 - stage: PublishEvidence
   displayName: 'Publish DR Evidence'
   dependsOn: RestoreDatabricks
   jobs:
   - job: Publish
-    displayName: 'Publish Evidence'
     steps:
     - checkout: self
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Evidence From Restore Stage'
+      inputs:
+        buildType: 'current'
+        artifactName: 'databricks-dr-evidence'
+        targetPath: '$(System.DefaultWorkingDirectory)/evidence'
 
     - task: AzureCLI@2
       displayName: 'Upload Evidence to Azure Storage'
@@ -140,6 +146,9 @@ stages:
         inlineScript: |
           cd "$(System.DefaultWorkingDirectory)"
 
+          Write-Host "Evidence directory:"
+          Get-ChildItem -Path ".\evidence" -Recurse -Force | Format-Table FullName, Length
+
           .\scripts\Publish-DrEvidence.ps1 `
             -SubscriptionId "$(subscriptionId)" `
             -ResourceGroupName "$(drResourceGroupName)" `
@@ -148,8 +157,8 @@ stages:
             -EvidencePath ".\evidence\databricks-restore-evidence.json"
 
     - task: PublishPipelineArtifact@1
-      displayName: 'Publish Evidence as Pipeline Artifact'
+      displayName: 'Publish Evidence as Final Pipeline Artifact'
       inputs:
         targetPath: '$(System.DefaultWorkingDirectory)/evidence'
-        artifact: 'databricks-dr-evidence'
+        artifact: 'databricks-dr-evidence-final'
         publishLocation: 'pipeline'

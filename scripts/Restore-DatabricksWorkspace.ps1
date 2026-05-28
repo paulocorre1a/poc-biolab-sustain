@@ -202,63 +202,30 @@ if (-not $workerReady) {
     throw "Databricks worker environment was not ready after waiting."
 }
 
-$clustersResponse = Invoke-DatabricksApi `
-    -Method GET `
-    -Path "/api/2.0/clusters/list"
-
-if ($clustersResponse.clusters) {
-    $oldClusters = $clustersResponse.clusters | Where-Object { $_.cluster_name -eq $ClusterName }
-
-    foreach ($oldCluster in $oldClusters) {
-        try {
-            Write-Host "Deleting old cluster: $($oldCluster.cluster_id)"
-            Invoke-DatabricksApi `
-                -Method POST `
-                -Path "/api/2.0/clusters/delete" `
-                -Body @{ cluster_id = $oldCluster.cluster_id } | Out-Null
-        }
-        catch {
-            Write-Host "Ignored cluster delete error: $($_.Exception.Message)"
-        }
-    }
-
-    Start-Sleep -Seconds 30
-}
-
-Write-Host "Creating cluster: $ClusterName"
-
-$clusterCreateResponse = Invoke-DatabricksApi `
-    -Method POST `
-    -Path "/api/2.0/clusters/create" `
-    -Body @{
-        cluster_name            = $ClusterName
-        spark_version           = $SparkVersion
-        node_type_id            = $NodeTypeId
-        autotermination_minutes = 30
-        autoscale               = @{
-            min_workers = $MinWorkers
-            max_workers = $MaxWorkers
-        }
-        spark_conf              = @{
-            "fs.azure.account.key.$DataStorageAccountName.dfs.core.windows.net"  = $storageKey
-            "fs.azure.account.key.$DataStorageAccountName.blob.core.windows.net" = $storageKey
-        }
-        custom_tags             = @{
-            project     = "biolab"
-            environment = "dev"
-            purpose     = "databricks-dr-poc-medallion"
-            managed_by  = "powershell"
-        }
-    }
-
-$clusterId = $clusterCreateResponse.cluster_id
-
 $jobPayload = @{
     name = $JobName
     tasks = @(
         @{
             task_key = "dr_validation"
-            existing_cluster_id = $clusterId
+            new_cluster = @{
+                spark_version           = $SparkVersion
+                node_type_id            = $NodeTypeId
+                autotermination_minutes = 30
+                autoscale               = @{
+                    min_workers = $MinWorkers
+                    max_workers = $MaxWorkers
+                }
+                spark_conf              = @{
+                    "fs.azure.account.key.$DataStorageAccountName.dfs.core.windows.net"  = $storageKey
+                    "fs.azure.account.key.$DataStorageAccountName.blob.core.windows.net" = $storageKey
+                }
+                custom_tags             = @{
+                    project     = "biolab"
+                    environment = "dev"
+                    purpose     = "databricks-dr-poc-medallion"
+                    managed_by  = "powershell"
+                }
+            }
             notebook_task = @{
                 notebook_path = $NotebookWorkspacePath
             }
@@ -325,7 +292,6 @@ $evidence = [ordered]@{
     gold_customer_path      = "abfss://gold@$DataStorageAccountName.dfs.core.windows.net/customer_revenue"
     gold_state_path         = "abfss://gold@$DataStorageAccountName.dfs.core.windows.net/state_revenue"
     cluster_name            = $ClusterName
-    cluster_id              = $clusterId
     notebook_workspace_path = $NotebookWorkspacePath
     job_name                = $JobName
     job_id                  = $jobId
@@ -340,7 +306,7 @@ $evidence |
     Set-Content -Path $evidencePath -Encoding UTF8
 
 Write-Host "Databricks restore submitted successfully."
-Write-Host "Cluster ID: $clusterId"
 Write-Host "Job ID    : $jobId"
 Write-Host "Run ID    : $runId"
 Write-Host "Evidence  : $evidencePath"
+

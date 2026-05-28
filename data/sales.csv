@@ -1,0 +1,7 @@
+sale_id,customer_id,product,amount
+1001,1,Notebook,3500
+1002,2,Mouse,120
+1003,1,Keyboard,250
+1004,3,Monitor,1800
+1005,4,Docking Station,900
+1006,5,Headset,400

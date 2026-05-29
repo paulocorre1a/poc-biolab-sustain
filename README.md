@@ -56,36 +56,9 @@ Agregações analíticas prontas para consumo.
 
 # Fluxo completo validado
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Terraform
-    participant Azure
-    participant Pipeline
-    participant Databricks
-    participant Storage
-
-    User->>Terraform: terraform destroy
-    Terraform->>Azure: remove ambiente completo
-
-    User->>Pipeline: Run Pipeline
-
-    Pipeline->>Terraform: terraform apply
-    Terraform->>Azure: recria infraestrutura
-
-    Pipeline->>Storage: recria containers
-    Pipeline->>Storage: upload datasets RAW
-
-    Pipeline->>Databricks: restaura notebook
-    Pipeline->>Databricks: recria job
-    Pipeline->>Databricks: executa processamento
-
-    Databricks->>Storage: gera BRONZE
-    Databricks->>Storage: gera SILVER
-    Databricks->>Storage: gera GOLD
-
-    Pipeline->>Storage: publica evidências
-```
+<p align="center">
+  <img src="documentation/Fluxo%20completo%20validado.png" alt="Fluxo completo validado" width="1200">
+</p>
 
 ---
 
@@ -187,12 +160,9 @@ Comprovação de que:
 
 # Arquitetura Medallion
 
-```mermaid
-flowchart LR
-    A[RAW CSV Files] --> B[BRONZE Delta]
-    B --> C[SILVER Delta]
-    C --> D[GOLD Analytics]
-```
+<p align="center">
+  <img src="documentation/Arquitetura%20Medallion.png" alt="Arquitetura Medallion" width="1000">
+</p>
 
 ---
 

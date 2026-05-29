@@ -209,6 +209,23 @@ flowchart LR
 
 ---
 
+## Observação sobre execução manual do notebook
+
+A validação oficial da POC deve ser feita pelo Job Databricks:
+
+Jobs & Pipelines -> job-poc-biolab-dr-validation -> Run now
+
+O notebook pode falhar se executado manualmente em Serverless ou em um All-purpose Compute sem a configuração de acesso ao Storage.
+
+Isso ocorre porque o pipeline cria um Job Cluster efêmero com a configuração necessária para acessar o Data Lake. Após a execução, esse cluster é encerrado automaticamente.
+
+Portanto, o comportamento esperado é:
+
+- Job Databricks com run SUCCESS
+- All-purpose Compute vazio
+- Evidência JSON com restore_status = SUCCESS
+
+
 # Resultado final da POC
 
 A solução demonstra um processo real de Disaster Recovery para Data Platforms em Azure:
